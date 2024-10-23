@@ -1,11 +1,41 @@
 from rest_framework import serializers
-from .models import Company, Category, Product, Order, OrderItem, CompanyCategory, Country, TopBurgerSection, Promotion, TopBurgerItem
-from .models import BusinessHours
+from .models import (
+    Company, 
+    CompanyBadge, 
+    Category, 
+    Product, 
+    Order, 
+    OrderItem, 
+    CompanyCategory, 
+    Country, 
+    TopBurgerSection, 
+    Promotion, 
+    TopBurgerItem,
+    BusinessHours
+)
 from django.db import transaction
 from django.utils import timezone
 from django.db.models import Q
 
+class CompanyBadgeSerializer(serializers.ModelSerializer):
+    icon_url = serializers.SerializerMethodField()
 
+    class Meta:
+        model = CompanyBadge
+        fields = [
+            'id',
+            'name',
+            'description',
+            'badge_type',
+            'icon_url',
+            'created_at',
+            'is_active'
+        ]
+
+    def get_icon_url(self, obj):
+        if obj.icon:
+            return self.context['request'].build_absolute_uri(obj.icon.url)
+        return None
 
 class BusinessHoursSerializer(serializers.ModelSerializer):
     class Meta:
@@ -30,12 +60,10 @@ class BusinessHoursSerializer(serializers.ModelSerializer):
                 
         return formatted_hours
 
-
 class CompanyCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanyCategory
         fields = ['id', 'name', 'description']
-
 
 class CountrySerializer(serializers.ModelSerializer):
     flag_emoji = serializers.SerializerMethodField()
@@ -52,7 +80,6 @@ class CountrySerializer(serializers.ModelSerializer):
         if obj.flag_icon:
             return obj.flag_icon.url
         return None
-
 
 class PromotionSerializer(serializers.ModelSerializer):
     banner_url = serializers.SerializerMethodField()
@@ -88,7 +115,7 @@ class PromotionSerializer(serializers.ModelSerializer):
 
     def get_banner_url(self, obj):
         if obj.banner:
-            return obj.banner.url
+            return self.context['request'].build_absolute_uri(obj.banner.url)
         return None
 
     def get_company_name(self, obj):
@@ -106,7 +133,6 @@ class PromotionSerializer(serializers.ModelSerializer):
         return f"${obj.discount_value}"
 
     def validate(self, data):
-        # Convertir el valor del descuento a entero si está presente
         if 'discount_value' in data:
             try:
                 data['discount_value'] = int(round(float(data['discount_value'])))
@@ -115,20 +141,17 @@ class PromotionSerializer(serializers.ModelSerializer):
                     'discount_value': 'El valor del descuento debe ser un número válido'
                 })
 
-        # Validar que el producto pertenezca a la compañía
         if 'product' in data and data.get('product') and data.get('company'):
             if data['product'].company != data['company']:
                 raise serializers.ValidationError({
                     'product': 'El producto debe pertenecer a la compañía seleccionada'
                 })
 
-        # Validar el porcentaje máximo
         if data.get('discount_type') == 'PERCENTAGE' and data.get('discount_value', 0) > 100:
             raise serializers.ValidationError({
                 'discount_value': 'El porcentaje de descuento no puede ser mayor a 100%'
-                })
+            })
 
-        # Validar las fechas
         if data.get('end_date') and data.get('start_date'):
             if data['end_date'] <= data['start_date']:
                 raise serializers.ValidationError({
@@ -138,13 +161,11 @@ class PromotionSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        # Asegurar que el valor del descuento sea entero
         if 'discount_value' in validated_data:
             validated_data['discount_value'] = int(round(float(validated_data['discount_value'])))
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        # Asegurar que el valor del descuento sea entero
         if 'discount_value' in validated_data:
             validated_data['discount_value'] = int(round(float(validated_data['discount_value'])))
         return super().update(instance, validated_data)
@@ -156,6 +177,7 @@ class CompanySerializer(serializers.ModelSerializer):
     country = CountrySerializer(read_only=False, required=False)
     business_hours = BusinessHoursSerializer(read_only=False, required=False)
     active_promotions = serializers.SerializerMethodField()
+    badges = CompanyBadgeSerializer(many=True, read_only=True)  # Añadido campo de badges
 
     class Meta:
         model = Company
@@ -163,17 +185,17 @@ class CompanySerializer(serializers.ModelSerializer):
 
     def get_profile_picture_url(self, obj):
         if obj.profile_picture:
-            return obj.profile_picture.url
+            return self.context['request'].build_absolute_uri(obj.profile_picture.url)
         return None
 
     def get_cover_photo_url(self, obj):
         if obj.cover_photo:
-            return obj.cover_photo.url
+            return self.context['request'].build_absolute_uri(obj.cover_photo.url)
         return None
 
     def get_active_promotions(self, obj):
         promotions = obj.promotions.filter(is_active=True)
-        return PromotionSerializer(promotions, many=True).data
+        return PromotionSerializer(promotions, many=True, context=self.context).data
 
     @transaction.atomic
     def create(self, validated_data):
@@ -181,6 +203,7 @@ class CompanySerializer(serializers.ModelSerializer):
             category_data = validated_data.pop('category', None)
             country_data = validated_data.pop('country', None)
             business_hours_data = validated_data.pop('business_hours', None)
+            badges_data = validated_data.pop('badges', [])  # Añadido manejo de badges
             
             if category_data:
                 category, _ = CompanyCategory.objects.get_or_create(**category_data)
@@ -195,6 +218,12 @@ class CompanySerializer(serializers.ModelSerializer):
             if business_hours_data:
                 BusinessHours.objects.create(company=company, **business_hours_data)
             
+            # Manejar badges
+            if badges_data:
+                for badge_data in badges_data:
+                    badge = CompanyBadge.objects.get(id=badge_data.get('id'))
+                    company.badges.add(badge)
+            
             return company
         except Exception as e:
             raise serializers.ValidationError(f"Error creating company: {str(e)}")
@@ -205,6 +234,7 @@ class CompanySerializer(serializers.ModelSerializer):
             category_data = validated_data.pop('category', None)
             country_data = validated_data.pop('country', None)
             business_hours_data = validated_data.pop('business_hours', None)
+            badges_data = validated_data.pop('badges', None)  # Añadido manejo de badges
             
             if category_data:
                 category, _ = CompanyCategory.objects.get_or_create(**category_data)
@@ -220,6 +250,13 @@ class CompanySerializer(serializers.ModelSerializer):
                     setattr(business_hours, attr, value)
                 business_hours.save()
             
+            # Actualizar badges si se proporcionan
+            if badges_data is not None:
+                instance.badges.clear()
+                for badge_data in badges_data:
+                    badge = CompanyBadge.objects.get(id=badge_data.get('id'))
+                    instance.badges.add(badge)
+            
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
@@ -228,12 +265,10 @@ class CompanySerializer(serializers.ModelSerializer):
         except Exception as e:
             raise serializers.ValidationError(f"Error updating company: {str(e)}")
 
-
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
-
 
 class ProductSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
@@ -245,7 +280,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         if obj.image:
-            return obj.image.url
+            return self.context['request'].build_absolute_uri(obj.image.url)
         return None
 
     def get_active_promotions(self, obj):
@@ -259,13 +294,10 @@ class ProductSerializer(serializers.ModelSerializer):
         )
         return PromotionSerializer(promotions, many=True, context=self.context).data
 
-
-
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = '__all__'
-
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -273,7 +305,6 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
-
 
 class TopBurgerItemSerializer(serializers.ModelSerializer):
     company_name = serializers.SerializerMethodField()
@@ -316,7 +347,6 @@ class TopBurgerItemSerializer(serializers.ModelSerializer):
         if obj.item_type == 'BANNER':
             return obj.custom_url
         return obj.company_profile_url if obj.company else ""
-
 
 class TopBurgerSectionSerializer(serializers.ModelSerializer):
     items = TopBurgerItemSerializer(many=True, read_only=True)

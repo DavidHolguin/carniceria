@@ -358,3 +358,52 @@ class Promotion(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.company.name}"
+    
+
+
+class CompanyBadge(models.Model):
+    BADGE_TYPES = [
+        ('RECORD_TIME', 'Tiempos record'),
+        ('BEST_RATED', 'Mejor calificado'),
+        ('INTENSE_FIRE', 'Fuego intenso'),
+    ]
+
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Nombre"
+    )
+    description = models.TextField(
+        verbose_name="Descripción"
+    )
+    badge_type = models.CharField(
+        max_length=20,
+        choices=BADGE_TYPES,
+        verbose_name="Tipo de insignia"
+    )
+    companies = models.ManyToManyField(
+        'Company',
+        related_name='badges',
+        verbose_name="Empresas",
+        blank=True
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de creación"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activa"
+    )
+    icon = CloudinaryField(
+        'image',
+        folder='company_badges/',
+        help_text="Icono de la insignia"
+    )
+
+    class Meta:
+        verbose_name = "Insignia de empresa"
+        verbose_name_plural = "Insignias de empresas"
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_badge_type_display()})"

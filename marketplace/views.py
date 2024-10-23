@@ -26,6 +26,7 @@ class CompanyCategoryViewSet(viewsets.ModelViewSet):
     queryset = CompanyCategory.objects.all()
     serializer_class = CompanyCategorySerializer
     permission_classes = [AllowAny]
+    
 
 class PromotionViewSet(viewsets.ModelViewSet):
     queryset = Promotion.objects.all()
@@ -95,16 +96,22 @@ class CompanyViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
+        """
+        Obtiene el queryset base con todas las relaciones necesarias precargadas
+        y aplica los filtros según los parámetros de la URL.
+        """
         queryset = Company.objects.prefetch_related(
             'business_hours',
             'category',
             'country',
-            'promotions'
+            'promotions',
+            'badges'
         ).select_related(
             'category',
             'country'
         )
         
+        # Aplicar filtros por categoría y país si existen en los parámetros
         category = self.request.query_params.get('category', None)
         country = self.request.query_params.get('country', None)
         
@@ -114,6 +121,74 @@ class CompanyViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(country__id=country)
            
         return queryset
+
+    def create(self, request, *args, **kwargs):
+        """
+        Crea una nueva empresa y maneja posibles errores durante el proceso.
+        """
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error creating company: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while creating the company'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def update(self, request, *args, **kwargs):
+        """
+        Actualiza una empresa existente y maneja posibles errores.
+        """
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+
+            if getattr(instance, '_prefetched_objects_cache', None):
+                instance._prefetched_objects_cache = {}
+
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error updating company: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while updating the company'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Obtiene una empresa específica y maneja posibles errores.
+        """
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except Company.DoesNotExist:
+            return Response(
+                {'error': 'Company not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error retrieving company: {str(e)}", exc_info=True)
+            return Response(
+                {'error': 'An unexpected error occurred'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina una empresa y maneja posibles errores.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error deleting company: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while deleting the company'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['get'])
     def active_promotions(self, request, pk=None):
@@ -141,9 +216,9 @@ class CompanyViewSet(viewsets.ModelViewSet):
             )
             
             serializer = PromotionSerializer(
-                promotions, 
-                many=True, 
-                context={'request': request}  # Importante para resolver URLs completas
+                promotions,
+                many=True,
+                context={'request': request}
             )
             
             response_data = {
@@ -157,97 +232,49 @@ class CompanyViewSet(viewsets.ModelViewSet):
             
         except Company.DoesNotExist:
             return Response(
-                {'error': 'Company not found'}, 
+                {'error': 'Company not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
             logger.error(f"Error retrieving company promotions: {str(e)}")
             return Response(
-                {'error': 'An error occurred while retrieving promotions'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def update(self, request, *args, **kwargs):
-        try:
-            partial = kwargs.pop('partial', False)
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=partial)
-            serializer.is_valid(raise_exception=True)
-            self.perform_update(serializer)
-
-            if getattr(instance, '_prefetched_objects_cache', None):
-                instance._prefetched_objects_cache = {}
-
-            return Response(serializer.data)
-        except Exception as e:
-            logger.error(f"Error updating company: {str(e)}")
-            return Response(
-                {'error': 'An error occurred while updating the company'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def retrieve(self, request, *args, **kwargs):
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-        except Company.DoesNotExist:
-            return Response(
-                {'error': 'Company not found'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            logger.error(f"Error retrieving company: {str(e)}", exc_info=True)
-            return Response(
-                {'error': 'An unexpected error occurred'}, 
+                {'error': 'An error occurred while retrieving promotions'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @action(detail=True, methods=['get'])
-    def active_promotions(self, request, pk=None):
+    def badges(self, request, pk=None):
         """
-        Endpoint especial para obtener solo las promociones activas de una empresa.
-        Incluye información detallada del producto y su categoría.
+        Endpoint especial para obtener todas las insignias de una empresa específica.
         """
         try:
             company = self.get_object()
-            now = timezone.now()
-            
-            # Optimizamos la consulta usando select_related para producto y categoría
-            promotions = company.promotions.filter(
-                is_active=True,
-                start_date__lte=now
-            ).filter(
-                Q(end_date__gte=now) | Q(end_date__isnull=True)
-            ).select_related(
-                'product',
-                'product__category'  # Agregamos la relación producto-categoría
-            ).order_by('end_date')  # Ordenamos por fecha de finalización
-            
-            serializer = PromotionSerializer(
-                promotions, 
-                many=True, 
+            badges = company.badges.filter(is_active=True)
+            serializer = CompanyBadgeSerializer(
+                badges,
+                many=True,
                 context={'request': request}
             )
-            
-            response_data = {
-                'count': promotions.count(),
-                'results': serializer.data
-            }
-            
-            return Response(response_data)
-            
+            return Response(serializer.data)
         except Company.DoesNotExist:
             return Response(
-                {'error': 'Company not found'}, 
+                {'error': 'Company not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger.error(f"Error retrieving company promotions: {str(e)}")
+            logger.error(f"Error retrieving company badges: {str(e)}")
             return Response(
-                {'error': 'An error occurred while retrieving promotions'}, 
+                {'error': 'An error occurred while retrieving badges'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def get_serializer_context(self):
+        """
+        Agrega el request al contexto del serializer para construir URLs absolutas.
+        """
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
         
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()

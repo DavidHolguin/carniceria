@@ -1,6 +1,77 @@
 from django.contrib import admin
-from .models import Company, Category, Product, BusinessHours, Promotion, Order, OrderItem, TopBurgerSection, TopBurgerItem, CompanyCategory, Country
+from .models import Company, Category, CompanyBadge, Product, BusinessHours, Promotion, Order, OrderItem, TopBurgerSection, TopBurgerItem, CompanyCategory, Country
 from django.utils.html import format_html
+
+@admin.register(CompanyBadge)
+class CompanyBadgeAdmin(admin.ModelAdmin):
+    list_display = (
+        'name',
+        'badge_type',
+        'is_active',
+        'companies_count',
+        'icon_preview',
+        'created_at'
+    )
+    
+    list_filter = (
+        'badge_type',
+        'is_active',
+        'created_at'
+    )
+    
+    search_fields = (
+        'name',
+        'description',
+        'companies__name'
+    )
+    
+    filter_horizontal = ('companies',)
+    
+    readonly_fields = (
+        'created_at',
+        'icon_preview'
+    )
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': (
+                'name',
+                'description',
+                'badge_type',
+                'is_active'
+            )
+        }),
+        ('Icono', {
+            'fields': (
+                'icon',
+                'icon_preview',
+            )
+        }),
+        ('Empresas Asociadas', {
+            'fields': (
+                'companies',
+            )
+        }),
+        ('Información del Sistema', {
+            'fields': (
+                'created_at',
+            ),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def companies_count(self, obj):
+        return obj.companies.count()
+    companies_count.short_description = "Número de empresas"
+    
+    def icon_preview(self, obj):
+        if obj.icon:
+            return format_html(
+                '<img src="{}" style="max-height: 50px;"/>',
+                obj.icon.url
+            )
+        return "Sin icono"
+    icon_preview.short_description = "Vista previa del icono"
 
 class BusinessHoursInline(admin.StackedInline):
     model = BusinessHours
