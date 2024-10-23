@@ -74,6 +74,11 @@ class Country(models.Model):
         verbose_name_plural = "Países"
         ordering = ['name']
 
+from django.db import models
+from django.contrib.auth.models import User
+from django.core.validators import URLValidator
+from cloudinary.models import CloudinaryField
+
 class Company(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     category = models.ForeignKey(
@@ -106,9 +111,59 @@ class Company(models.Model):
     )
     phone = models.CharField(max_length=20)
     address = models.TextField()
+    
+    # Nuevos campos para redes sociales y maps
+    google_maps_url = models.URLField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="URL de Google Maps",
+        help_text="URL completa de la ubicación en Google Maps"
+    )
+    instagram_url = models.URLField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="URL de Instagram",
+        help_text="URL completa del perfil de Instagram"
+    )
+    facebook_url = models.URLField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="URL de Facebook",
+        help_text="URL completa del perfil o página de Facebook"
+    )
+    whatsapp_url = models.URLField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name="URL de WhatsApp",
+        help_text="URL completa del enlace de WhatsApp"
+    )
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        # Validador de URL para asegurar que los enlaces sean válidos
+        url_validator = URLValidator()
+        
+        fields_to_validate = {
+            'google_maps_url': self.google_maps_url,
+            'instagram_url': self.instagram_url,
+            'facebook_url': self.facebook_url,
+            'whatsapp_url': self.whatsapp_url
+        }
+        
+        for field_name, value in fields_to_validate.items():
+            if value:
+                try:
+                    url_validator(value)
+                except ValidationError:
+                    raise ValidationError({
+                        field_name: 'Por favor, ingrese una URL válida.'
+                    })
 
 
 class Category(models.Model):
