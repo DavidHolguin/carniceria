@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, URLValidator
 from cloudinary.models import CloudinaryField
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
@@ -84,8 +84,6 @@ class Country(models.Model):
         verbose_name_plural = "Países"
         ordering = ['name']
 
-
-
 class Company(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     category = models.ForeignKey(
@@ -104,11 +102,6 @@ class Company(models.Model):
         blank=True,
         verbose_name="Configuración de Reservas"
     )
-
-@receiver(post_save, sender=Company)
-def create_booking_settings(sender, instance, created, **kwargs):
-    if created:
-        BookingSettings.objects.create(company=instance)
     country = models.ForeignKey(
         Country,
         on_delete=models.SET_NULL,
@@ -122,15 +115,19 @@ def create_booking_settings(sender, instance, created, **kwargs):
     profile_picture = CloudinaryField(
         'image',
         folder='company_profiles/',
+        null=True,
+        blank=True,
         help_text="Imagen de perfil de la compañía"
     )
     cover_photo = CloudinaryField(
         'image',
         folder='company_covers/',
+        null=True,
+        blank=True,
         help_text="Foto de portada de la compañía"
     )
-    phone = models.CharField(max_length=20)
-    address = models.TextField()
+    phone = models.CharField(max_length=20, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)  # Hacemos este campo opcional
     
     # Nuevos campos para redes sociales y maps
     google_maps_url = models.URLField(
@@ -160,6 +157,7 @@ def create_booking_settings(sender, instance, created, **kwargs):
         blank=True,
         verbose_name="URL de WhatsApp",
         help_text="URL completa del enlace de WhatsApp"
+    
     )
 
     def __str__(self):
@@ -185,6 +183,10 @@ def create_booking_settings(sender, instance, created, **kwargs):
                         field_name: 'Por favor, ingrese una URL válida.'
                     })
 
+@receiver(post_save, sender=Company)
+def create_booking_settings(sender, instance, created, **kwargs):
+    if created and not instance.booking_settings:
+        BookingSettings.objects.create(company=instance)
 
 class Category(models.Model):
     CATEGORY_TYPES = [
@@ -232,7 +234,7 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name}"
-    
+
 class TopBurgerSection(models.Model):
     title = models.CharField(max_length=100, default="TOP 3 BURGUERS")
     location = models.CharField(max_length=100, default="en San Jose")
@@ -331,7 +333,6 @@ class BusinessHours(models.Model):
 
     def __str__(self):
         return f"Horario de {self.company.name}"
-    
 
 class Promotion(models.Model):
     DISCOUNT_TYPE_CHOICES = [
@@ -376,7 +377,7 @@ class Promotion(models.Model):
         choices=DISCOUNT_TYPE_CHOICES,
         verbose_name="Tipo de Descuento"
     )
-    discount_value = models.IntegerField(  # Cambiado a IntegerField
+    discount_value = models.IntegerField(
         validators=[MinValueValidator(0)],
         verbose_name="Valor del Descuento"
     )
@@ -402,7 +403,7 @@ class Promotion(models.Model):
         verbose_name="Fecha de Creación"
     )
     updated_at = models.DateTimeField(
-        auto_now=True,
+       auto_now=True,
         verbose_name="Última Actualización"
     )
 
@@ -433,8 +434,6 @@ class Promotion(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.company.name}"
-    
-
 
 class CompanyBadge(models.Model):
     BADGE_TYPES = [
