@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'pay',
     'corsheaders',
     'drf_spectacular',
     'cloudinary',
@@ -93,9 +94,6 @@ CORS_ALLOWED_ORIGINS = [
     'https://findout-nine.vercel.app',
     'https://findout.store',
     'https://www.findout.store',
-    'https://influbot.vercel.app',
-    'https://influbot.co',
-    'https://www.influbot.co',
     'http://localhost:3000',
 ]
 CORS_ALLOW_CREDENTIALS = True

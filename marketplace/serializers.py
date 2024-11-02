@@ -63,7 +63,7 @@ class BusinessHoursSerializer(serializers.ModelSerializer):
 class CompanyCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanyCategory
-        fields = ['id', 'name', 'description']
+        fields = ['id', 'name', 'description', 'image']
 
 class CountrySerializer(serializers.ModelSerializer):
     flag_emoji = serializers.SerializerMethodField()

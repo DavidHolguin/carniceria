@@ -1,3 +1,4 @@
+# admin.py
 from django.contrib import admin
 from .models import Company, Category, CompanyBadge, Product, BusinessHours, Promotion, Order, OrderItem, TopBurgerSection, TopBurgerItem, CompanyCategory, Country
 from django.utils.html import format_html
@@ -101,10 +102,14 @@ class BusinessHoursInline(admin.StackedInline):
         }),
     )
 
-@admin.register(Company)
+@admin.register(Company) 
 class CompanyAdmin(admin.ModelAdmin):
+    list_display = ['get_company_name', 'get_business_hours']
     inlines = [BusinessHoursInline]
-    list_display = ['name', 'get_business_hours']
+
+    def get_company_name(self, obj):
+        return obj.name
+    get_company_name.short_description = 'Nombre'
 
     def get_business_hours(self, obj):
         try:

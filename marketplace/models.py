@@ -4,10 +4,20 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from cloudinary.models import CloudinaryField
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
+from bookingEngine.models import BookingSettings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class CompanyCategory(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    image = CloudinaryField(
+        'image',
+        folder='company_categories/',
+        null=True,
+        blank=True,
+        help_text="Imagen cuadrada para la categoría"
+    )
 
     def __str__(self):
         return self.name
@@ -74,10 +84,7 @@ class Country(models.Model):
         verbose_name_plural = "Países"
         ordering = ['name']
 
-from django.db import models
-from django.contrib.auth.models import User
-from django.core.validators import URLValidator
-from cloudinary.models import CloudinaryField
+
 
 class Company(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -89,6 +96,19 @@ class Company(models.Model):
         related_name='companies',
         verbose_name="Categoría"
     )
+    booking_settings = models.OneToOneField(
+        BookingSettings,
+        on_delete=models.CASCADE,
+        related_name='company_settings',
+        null=True,
+        blank=True,
+        verbose_name="Configuración de Reservas"
+    )
+
+@receiver(post_save, sender=Company)
+def create_booking_settings(sender, instance, created, **kwargs):
+    if created:
+        BookingSettings.objects.create(company=instance)
     country = models.ForeignKey(
         Country,
         on_delete=models.SET_NULL,
